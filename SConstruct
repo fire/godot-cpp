@@ -8,6 +8,10 @@ def add_sources(sources, dir, extension):
       if f.endswith('.' + extension):
           sources.append(dir + '/' + f)
 
+env = Environment()
+
+opts = Variables([], ARGUMENTS)
+
 # Try to detect the host platform automatically
 # This is used if no `platform` argument is passed
 if sys.platform.startswith('linux'):
@@ -19,55 +23,66 @@ elif sys.platform == 'win32':
 else:
     raise ValueError('Could not detect platform automatically, please specify with platform=<platform>')
 
-opts = Variables([], ARGUMENTS)
-
 opts.Add(EnumVariable('platform', 'Target platform', host_platform, ('linux', 'osx', 'windows')))
+opts.Add(PathVariable('osxcross_dir', 'Platform', '.'))
 opts.Add(EnumVariable('bits', 'Target platform bits', 'default', ('default', '32', '64')))
 opts.Add(BoolVariable('use_llvm', 'Use the LLVM compiler - only effective when targeting Linux', False))
 opts.Add(BoolVariable('use_mingw', 'Use the MinGW compiler - only effective on Windows', False))
 # Must be the same setting as used for cpp_bindings
 opts.Add(EnumVariable('target', 'Compilation target', 'debug', ('debug', 'release')))
+opts.Add(BoolVariable('use_osxcross', 'Use the OSX crosscompiler', False))
 opts.Add(PathVariable('headers_dir', 'Path to the directory containing Godot headers', 'godot_headers'))
 
-env = Environment()
 opts.Update(env)
 Help(opts.GenerateHelpText(env))
-
-# This makes sure to keep the session environment variables on Windows
-# This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
-if env['platform'] == 'windows':
-    if env['bits'] == '64':
-        env = Environment(TARGET_ARCH='amd64')
-    elif env['bits'] == '32':
-        env = Environment(TARGET_ARCH='x86')
-    opts.Update(env)
 
 is64 = sys.maxsize > 2**32
 if env['bits'] == 'default':
     env['bits'] = '64' if is64 else '32'
 
-if env['platform'] == 'linux':
+if env['platform'] == 'linux' and not env['use_osxcross']:
     if env['use_llvm']:
         env['CXX'] = 'clang++'
 
-    env.Append(CCFLAGS=['-fPIC', '-g', '-std=c++14', '-Wwrite-strings'])
-    env.Append(LINKFLAGS=["-Wl,-R,'$$ORIGIN'"])
+    if not env['use_mingw']:
+        env.Append(CCFLAGS=['-fPIC', '-g', '-std=c++14', '-Wwrite-strings'])
+        env.Append(LINKFLAGS=["-Wl,-R,'$$ORIGIN'"])
 
-    if env['target'] == 'debug':
-        env.Append(CCFLAGS=['-Og'])
-    elif env['target'] == 'release':
-        env.Append(CCFLAGS=['-O3'])
+        if env['target'] == 'debug':
+            env.Append(CCFLAGS=['-Og'])
+        elif env['target'] == 'release':
+            env.Append(CCFLAGS=['-O3'])
 
-    if env['bits'] == '64':
-        env.Append(CCFLAGS=['-m64'])
-        env.Append(LINKFLAGS=['-m64'])
-    elif env['bits'] == '32':
-        env.Append(CCFLAGS=['-m32'])
-        env.Append(LINKFLAGS=['-m32'])
+        if env['bits'] == '64':
+            env.Append(CCFLAGS=['-m64'])
+            env.Append(LINKFLAGS=['-m64'])
+        elif env['bits'] == '32':
+            env.Append(CCFLAGS=['-m32'])
+            env.Append(LINKFLAGS=['-m32'])
 
-elif env['platform'] == 'osx':
+    if env['use_mingw']:
+        # MinGW
+        if env['bits'] == '64':
+            env['CXX'] = 'x86_64-w64-mingw32-g++'
+        elif env['bits'] == '32':
+            env['CXX'] = 'i686-w64-mingw32-g++'
+
+        env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
+        env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++'])
+        env['platform'] = 'windows'
+
+elif env['platform'] == 'osx' or env['use_osxcross']:
     if env['bits'] == '32':
         raise ValueError('Only 64-bit builds are supported for the macOS target.')
+
+    env['platform'] = 'osx'
+
+    if env['osxcross_dir']:
+        env['CXX'] = env['osxcross_dir'] + '/target/bin/x86_64-apple-darwin15-clang++-libc++'
+        env['LINK'] = env['osxcross_dir'] + '/target/bin/x86_64-apple-darwin15-clang++-libc++'
+        env['AR'] = env['osxcross_dir'] + '/target/bin/x86_64-apple-darwin15-ar'
+        env['AS'] = env['osxcross_dir'] + '/target/bin/x86_64-apple-darwin15-as'
+        env['RANLIB'] = env['osxcross_dir'] + '/target/bin/x86_64-apple-darwin15-ranlib'
 
     env.Append(CCFLAGS=['-g', '-std=c++14', '-arch', 'x86_64'])
     env.Append(LINKFLAGS=['-arch', 'x86_64', '-framework', 'Cocoa', '-Wl,-undefined,dynamic_lookup'])
@@ -78,6 +93,15 @@ elif env['platform'] == 'osx':
         env.Append(CCFLAGS=['-O3'])
 
 elif env['platform'] == 'windows':
+    # This makes sure to keep the session environment variables on Windows
+    # This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
+    if env['bits'] == '64':
+        env.Override(os.environ)
+        env.Append(TARGET_ARCH='amd64')
+    elif env['bits'] == '32':
+        env.Override(os.environ)
+        env.Append(TARGET_ARCH='x86')
+
     if host_platform == 'windows' and not env['use_mingw']:
         # MSVC
         env.Append(LINKFLAGS=['/WX'])
