@@ -1,7 +1,56 @@
 #!python
 
 import os, subprocess, platform, sys
+from compat import iteritems, isbasestring
 
+def use_windows_spawn_fix(self, platform=None):
+
+    if (os.name != "nt"):
+        return  # not needed, only for windows
+
+    # On Windows, due to the limited command line length, when creating a static library
+    # from a very high number of objects SCons will invoke "ar" once per object file;
+    # that makes object files with same names to be overwritten so the last wins and
+    # the library looses symbols defined by overwritten objects.
+    # By enabling quick append instead of the default mode (replacing), libraries will
+    # got built correctly regardless the invocation strategy.
+    # Furthermore, since SCons will rebuild the library from scratch when an object file
+    # changes, no multiple versions of the same object file will be present.
+    self.Replace(ARFLAGS='q')
+
+    def mySubProcess(cmdline, env):
+
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, startupinfo=startupinfo, shell=False, env=env)
+        data, err = proc.communicate()
+        rv = proc.wait()
+        if rv:
+            print("=====")
+            print(err)
+            print("=====")
+        return rv
+
+    def mySpawn(sh, escape, cmd, args, env):
+
+        newargs = ' '.join(args[1:])
+        cmdline = cmd + " " + newargs
+
+        rv = 0
+        env = {str(key): str(value) for key, value in iteritems(env)}
+        if len(cmdline) > 32000 and cmd.endswith("ar"):
+            cmdline = cmd + " " + args[1] + " " + args[2] + " "
+            for i in range(3, len(args)):
+                rv = mySubProcess(cmdline + args[i], env)
+                if rv:
+                    break
+        else:
+            rv = mySubProcess(cmdline, env)
+
+        return rv
+
+    self['SPAWN'] = mySpawn
 
 def add_sources(sources, dir, extension):
   for f in os.listdir(dir):
@@ -93,6 +142,7 @@ elif env['platform'] == 'osx' or env['use_osxcross']:
         env.Append(CCFLAGS=['-O3'])
 
 elif env['platform'] == 'windows':
+
     # This makes sure to keep the session environment variables on Windows
     # This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
     if env['bits'] == '64':
@@ -102,7 +152,7 @@ elif env['platform'] == 'windows':
         env.Override(os.environ)
         env.Append(TARGET_ARCH='x86')
 
-    if host_platform == 'windows' and not env['use_mingw']:
+    if host_platform == 'windows' and env['use_mingw'] == False:
         # MSVC
         env.Append(LINKFLAGS=['/WX'])
         if env['target'] == 'debug':
@@ -110,15 +160,20 @@ elif env['platform'] == 'windows':
         elif env['target'] == 'release':
             env.Append(CCFLAGS=['/O2', '/EHsc', '/DNDEBUG', '/MD'])
     else:
+        env = env.Clone(tools = ['mingw'])
+        env['ENV'] = {'PATH' : os.environ['PATH'], 'TMP' : os.environ['TMP']}
+        # Workaround for MinGW. See:
+        # http://www.scons.org/wiki/LongCmdLinesOnWin32
+        use_windows_spawn_fix(env)
+
         # MinGW
         if env['bits'] == '64':
             env['CXX'] = 'x86_64-w64-mingw32-g++'
         elif env['bits'] == '32':
             env['CXX'] = 'i686-w64-mingw32-g++'
 
-        env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
-        env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++'])
-
+        env['CCFLAGS'] = ['-g', '-O3', '-std=c++14', '-Wwrite-strings']
+        env['LINKFLAGS']= ['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++']
 
 env.Append(CPPPATH=['.', env['headers_dir'], 'include', 'include/gen', 'include/core'])
 # Generate bindings?
@@ -146,3 +201,4 @@ library = env.StaticLibrary(
     target='bin/' + 'libgodot-cpp.{}.{}.{}'.format(env['platform'], env['target'], env['bits']), source=sources
 )
 Default(library)
+
