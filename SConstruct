@@ -159,7 +159,7 @@ elif env['platform'] == 'windows':
             env.Append(CCFLAGS=['/EHsc', '/D_DEBUG', '/MDd'])
         elif env['target'] == 'release':
             env.Append(CCFLAGS=['/O2', '/EHsc', '/DNDEBUG', '/MD'])
-    else:
+    elif host_platform == 'windows':
         env = env.Clone(tools = ['mingw'])
         env['ENV'] = {'PATH' : os.environ['PATH'], 'TMP' : os.environ['TMP']}
         # Workaround for MinGW. See:
