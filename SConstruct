@@ -109,23 +109,26 @@ if env['platform'] == 'linux' and not env['use_osxcross']:
             env.Append(CCFLAGS=['-m32'])
             env.Append(LINKFLAGS=['-m32'])
 
-	if env['use_mingw']:
-	# MinGW
-	mingw_prefix = '' 
-	if env['bits'] == '64':
-		mingw_prefix = 'x86_64-w64-mingw32-'
-	elif env['bits'] == '32':
-		mingw_prefix = 'i686-w64-mingw32-'
-    	env["CC"] = mingw_prefix + "gcc"
-    	env['AS'] = mingw_prefix + "as"
-    	env['CXX'] = mingw_prefix + "g++"
-    	env['AR'] = mingw_prefix + "gcc-ar"
-    	env['RANLIB'] = mingw_prefix + "gcc-ranlib"
-    	env['LINK'] = mingw_prefix + "g++"
+    if env['use_mingw']:
+        if env['bits'] == '64':
+            env['CXX'] = 'x86_64-w64-mingw32-g++'
+        elif env['bits'] == '32':
+            env['CXX'] = 'i686-w64-mingw32-g++'
+		mingw_prefix = '' 
+		if env['bits'] == '64':
+			mingw_prefix = 'x86_64-w64-mingw32-'
+		elif env['bits'] == '32':
+			mingw_prefix = 'i686-w64-mingw32-'
+    		env["CC"] = mingw_prefix + "gcc"
+    		env['AS'] = mingw_prefix + "as"
+    		env['CXX'] = mingw_prefix + "g++"
+    		env['AR'] = mingw_prefix + "gcc-ar"
+    		env['RANLIB'] = mingw_prefix + "gcc-ranlib"
+    		env['LINK'] = mingw_prefix + "g++"
         
-        env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
-        env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-Wl,--subsystem,windows'])
-        env['platform'] = 'windows'
+			env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
+			env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-Wl,--subsystem,windows'])
+			env['platform'] = 'windows'
 
 elif env['platform'] == 'osx' or env['use_osxcross']:
     if env['bits'] == '32':
