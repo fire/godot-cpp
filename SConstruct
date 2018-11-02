@@ -109,10 +109,9 @@ if env['platform'] == 'linux' and not env['use_osxcross']:
             env.Append(CCFLAGS=['-m32'])
             env.Append(LINKFLAGS=['-m32'])
 
-    if env['use_mingw']:
-        # MinGW
-        mingw_prefix = '' 
+	if env['use_mingw']:
 	# MinGW
+	mingw_prefix = '' 
 	if env['bits'] == '64':
 		mingw_prefix = 'x86_64-w64-mingw32-'
 	elif env['bits'] == '32':
