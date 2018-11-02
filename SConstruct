@@ -111,13 +111,21 @@ if env['platform'] == 'linux' and not env['use_osxcross']:
 
     if env['use_mingw']:
         # MinGW
-        if env['bits'] == '64':
-            env['CXX'] = 'x86_64-w64-mingw32-g++'
-        elif env['bits'] == '32':
-            env['CXX'] = 'i686-w64-mingw32-g++'
-
+        mingw_prefix = '' 
+	# MinGW
+	if env['bits'] == '64':
+		mingw_prefix = 'x86_64-w64-mingw32-'
+	elif env['bits'] == '32':
+		mingw_prefix = 'i686-w64-mingw32-'
+    	env["CC"] = mingw_prefix + "gcc"
+    	env['AS'] = mingw_prefix + "as"
+    	env['CXX'] = mingw_prefix + "g++"
+    	env['AR'] = mingw_prefix + "gcc-ar"
+    	env['RANLIB'] = mingw_prefix + "gcc-ranlib"
+    	env['LINK'] = mingw_prefix + "g++"
+        
         env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
-        env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++'])
+        env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-Wl,--subsystem,windows'])
         env['platform'] = 'windows'
 
 elif env['platform'] == 'osx' or env['use_osxcross']:
@@ -159,18 +167,23 @@ elif env['platform'] == 'windows':
             env.Append(CCFLAGS=['/EHsc', '/D_DEBUG', '/MDd'])
         elif env['target'] == 'release':
             env.Append(CCFLAGS=['/O2', '/EHsc', '/DNDEBUG', '/MD'])
-    else:
+    elif host_platform == 'windows':
         env = env.Clone(tools = ['mingw'])
         env['ENV'] = {'PATH' : os.environ['PATH'], 'TMP' : os.environ['TMP']}
         # Workaround for MinGW. See:
         # http://www.scons.org/wiki/LongCmdLinesOnWin32
         use_windows_spawn_fix(env)
-
-        # MinGW
+        
         if env['bits'] == '64':
-            env['CXX'] = 'x86_64-w64-mingw32-g++'
+                mingw_prefix = 'x86_64-w64-mingw32-g++'
         elif env['bits'] == '32':
-            env['CXX'] = 'i686-w64-mingw32-g++'
+                mingw_prefix = 'i686-w64-mingw32-g++'
+        env["CC"] = mingw_prefix + "gcc"
+        env['AS'] = mingw_prefix + "as"
+        env['CXX'] = mingw_prefix + "g++"
+        env['AR'] = mingw_prefix + "gcc-ar"
+        env['RANLIB'] = mingw_prefix + "gcc-ranlib"
+        env['LINK'] = mingw_prefix + "g++"
 
         env['CCFLAGS'] = ['-g', '-O3', '-std=c++14', '-Wwrite-strings']
         env['LINKFLAGS']= ['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++']
